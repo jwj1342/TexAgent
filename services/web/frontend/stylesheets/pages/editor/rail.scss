@@ -50,6 +50,7 @@ body {
   color: var(--ide-rail-color);
   margin-bottom: 0;
   font-weight: bold;
+  width: 100%;
 }
 
 .ide-rail-tab-button {
@@ -91,6 +92,12 @@ body {
   .ide-rail-tab-link-icon {
     line-height: 32px;
     font-size: 20px;
+  }
+
+  .ide-rail-tab-img-icon {
+    width: 20px;
+    max-height: 32px;
+    object-fit: contain;
   }
 
   &.open-rail {

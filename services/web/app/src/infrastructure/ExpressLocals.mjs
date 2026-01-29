@@ -6,13 +6,13 @@ import Path from 'node:path'
 import moment from 'moment'
 import { fetchJson } from '@overleaf/fetch-utils'
 import contentDisposition from 'content-disposition'
-import Features from './Features.js'
+import Features from './Features.mjs'
 import SessionManager from '../Features/Authentication/SessionManager.mjs'
 import PackageVersions from './PackageVersions.js'
-import Modules from './Modules.js'
+import Modules from './Modules.mjs'
 import Errors from '../Features/Errors/Errors.js'
 import AdminAuthorizationHelper from '../Features/Helpers/AdminAuthorizationHelper.mjs'
-import { addOptionalCleanupHandlerAfterDrainingConnections } from './GracefulShutdown.js'
+import { addOptionalCleanupHandlerAfterDrainingConnections } from './GracefulShutdown.mjs'
 import { sanitizeSessionUserForFrontEnd } from './FrontEndUser.mjs'
 import { expressify } from '@overleaf/promise-utils'
 
@@ -338,6 +338,18 @@ export default async function (webRouter, privateApiRouter, publicApiRouter) {
   })
 
   webRouter.use(function (req, res, next) {
+    const KEY_PREFIX = 'readnotif-'
+    const dismissedNotifications = []
+    for (const cookieName in req.cookies) {
+      if (cookieName.startsWith(KEY_PREFIX)) {
+        dismissedNotifications.push(cookieName.slice(KEY_PREFIX.length))
+      }
+    }
+    res.locals.dismissedNotifications = dismissedNotifications
+    next()
+  })
+
+  webRouter.use(function (req, res, next) {
     res.locals.ExposedSettings = {
       isOverleaf: Settings.overleaf != null,
       appName: Settings.appName,
@@ -390,6 +402,7 @@ export default async function (webRouter, privateApiRouter, publicApiRouter) {
         Settings.overleaf != null || Settings.templates?.user_id != null,
       cioWriteKey: Settings.analytics?.cio?.writeKey,
       cioSiteId: Settings.analytics?.cio?.siteId,
+      linkedInInsightsPartnerId: Settings.analytics?.linkedIn?.partnerId,
     }
     next()
   })

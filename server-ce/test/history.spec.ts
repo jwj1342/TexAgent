@@ -1,4 +1,4 @@
-import { createProject } from './helpers/project'
+import { createProjectAndOpenInNewEditor } from './helpers/project'
 import { prepareWaitForNextCompileSlot } from './helpers/compile'
 import { ensureUserExists, login } from './helpers/login'
 import { isExcludedBySharding, startWith } from './helpers/config'
@@ -61,10 +61,10 @@ describe('History', function () {
   const CLASS_ADDITION = 'ol-cm-addition-marker'
   const CLASS_DELETION = 'ol-cm-deletion-marker'
 
-  it('should support labels, comparison and download', () => {
+  it('should support labels, comparison and download', function () {
     const { recompile, waitForCompile } = prepareWaitForNextCompileSlot()
     waitForCompile(() => {
-      createProject('labels')
+      createProjectAndOpenInNewEditor('labels')
     })
 
     cy.log('add content, including a line that will get removed soon')

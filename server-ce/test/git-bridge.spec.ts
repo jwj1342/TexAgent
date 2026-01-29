@@ -3,6 +3,7 @@ import { isExcludedBySharding, startWith } from './helpers/config'
 import { ensureUserExists, login } from './helpers/login'
 import {
   createProject,
+  createProjectAndOpenInNewEditor,
   enableLinkSharing,
   openProjectByName,
   openProjectViaLinkSharingAsUser,
@@ -65,18 +66,20 @@ describe('git-bridge', function () {
       login(USER)
     })
 
-    it('should render the git-bridge UI in the settings', () => {
+    it('should render the git-bridge UI in the settings', function () {
       maybeClearAllTokens()
       cy.visit('/user/settings')
       cy.findByRole('heading', { name: 'Git integration' })
       cy.findByRole('button', {
         name: 'Git integration Generate token',
       }).click()
-      cy.findByLabelText('Git authentication token')
-        .contains(/olp_[a-zA-Z0-9]{16}/)
-        .then(el => el.text())
-        .as('newToken')
-      cy.findAllByText('Close').last().click()
+      cy.findByRole('dialog').within(() => {
+        cy.findByLabelText('Git authentication token')
+          .contains(/olp_[a-zA-Z0-9]{16}/)
+          .then(el => el.text())
+          .as('newToken')
+        cy.findByRole('button', { name: 'Close dialog' }).click()
+      })
       cy.get('@newToken').then(token => {
         // There can be more than one token with the same prefix when retrying
         cy.findAllByText(
@@ -96,16 +99,10 @@ describe('git-bridge', function () {
 
     it('should render the git-bridge UI in the editor', function () {
       maybeClearAllTokens()
-      createProject('git').as('projectId')
-      cy.findByRole('navigation', {
-        name: 'Project actions',
-      })
-        .findByRole('button', { name: 'Menu' })
-        .click()
-      cy.findByTestId('left-menu').within(() => {
-        cy.findByRole('heading', { name: 'Sync' })
-        cy.findByRole('button', { name: 'Git' }).click()
-      })
+      createProjectAndOpenInNewEditor('git').as('projectId')
+      cy.findByRole('tab', { name: 'Integrations' }).click()
+      cy.findByText('Git clone this project.').click()
+
       cy.findByTestId('git-bridge-modal').within(() => {
         cy.get('@projectId').then(id => {
           cy.findByLabelText('Git clone project command').contains(
@@ -122,14 +119,7 @@ describe('git-bridge', function () {
 
       // Re-open
       cy.url().then(url => cy.visit(url))
-      cy.findByRole('navigation', {
-        name: 'Project actions',
-      })
-        .findByRole('button', { name: 'Menu' })
-        .click()
-      cy.findByTestId('left-menu').within(() => {
-        cy.findByRole('button', { name: 'Git' }).click()
-      })
+      cy.findByText('Git clone this project.').click()
 
       cy.findByTestId('git-bridge-modal').within(() => {
         cy.get('@projectId').then(id => {
@@ -147,7 +137,7 @@ describe('git-bridge', function () {
       })
     })
 
-    describe('git access', () => {
+    describe('git access', function () {
       ensureUserExists({ email: 'collaborator-rw@example.com' })
       ensureUserExists({ email: 'collaborator-ro@example.com' })
       ensureUserExists({ email: 'collaborator-link-rw@example.com' })
@@ -156,48 +146,50 @@ describe('git-bridge', function () {
       let projectName: string
       let recompile: () => void
       let waitForCompile: (triggerCompile: () => void) => void
-      beforeEach(() => {
+      beforeEach(function () {
         projectName = uuid()
         createProject(projectName, { open: false }).as('projectId')
         ;({ recompile, waitForCompile } = prepareWaitForNextCompileSlot())
       })
 
-      it('should expose r/w interface to owner', () => {
+      it('should expose r/w interface to owner', function () {
         maybeClearAllTokens()
         waitForCompile(() => {
-          openProjectByName(projectName)
+          openProjectByName(projectName, true)
         })
         checkGitAccess('readAndWrite')
       })
 
-      it('should expose r/w interface to invited r/w collaborator', () => {
+      it('should expose r/w interface to invited r/w collaborator', function () {
         shareProjectByEmailAndAcceptInviteViaDash(
           projectName,
           'collaborator-rw@example.com',
-          'Editor'
+          'Editor',
+          true
         )
         maybeClearAllTokens()
         waitForCompile(() => {
-          openProjectByName(projectName)
+          openProjectByName(projectName, true)
         })
         checkGitAccess('readAndWrite')
       })
 
-      it('should expose r/o interface to invited r/o collaborator', () => {
+      it('should expose r/o interface to invited r/o collaborator', function () {
         shareProjectByEmailAndAcceptInviteViaDash(
           projectName,
           'collaborator-ro@example.com',
-          'Viewer'
+          'Viewer',
+          true
         )
         maybeClearAllTokens()
         waitForCompile(() => {
-          openProjectByName(projectName)
+          openProjectByName(projectName, true)
         })
         checkGitAccess('readOnly')
       })
 
-      it('should expose r/w interface to link-sharing r/w collaborator', () => {
-        openProjectByName(projectName)
+      it('should expose r/w interface to link-sharing r/w collaborator', function () {
+        openProjectByName(projectName, true)
         enableLinkSharing().then(({ linkSharingReadAndWrite }) => {
           const email = 'collaborator-link-rw@example.com'
           login(email)
@@ -206,16 +198,17 @@ describe('git-bridge', function () {
             openProjectViaLinkSharingAsUser(
               linkSharingReadAndWrite,
               projectName,
-              email
+              email,
+              true
             )
           })
           checkGitAccess('readAndWrite')
         })
       })
 
-      it('should expose r/o interface to link-sharing r/o collaborator', () => {
+      it('should expose r/o interface to link-sharing r/o collaborator', function () {
         waitForCompile(() => {
-          openProjectByName(projectName)
+          openProjectByName(projectName, true)
         })
         enableLinkSharing().then(({ linkSharingReadOnly }) => {
           const email = 'collaborator-link-ro@example.com'
@@ -225,7 +218,8 @@ describe('git-bridge', function () {
             openProjectViaLinkSharingAsUser(
               linkSharingReadOnly,
               projectName,
-              email
+              email,
+              true
             )
           })
           checkGitAccess('readOnly')
@@ -233,15 +227,9 @@ describe('git-bridge', function () {
       })
 
       function checkGitAccess(access: 'readOnly' | 'readAndWrite') {
-        cy.findByRole('navigation', {
-          name: 'Project actions',
-        })
-          .findByRole('button', { name: 'Menu' })
-          .click()
-        cy.findByTestId('left-menu').within(() => {
-          cy.findByRole('heading', { name: 'Sync' })
-          cy.findByRole('button', { name: 'Git' }).click()
-        })
+        cy.findByRole('tab', { name: 'Integrations' }).click()
+        cy.findByText('Git clone this project.').click()
+
         cy.get('@projectId').then(projectId => {
           cy.findByTestId('git-bridge-modal').within(() => {
             cy.findByLabelText('Git clone project command').contains(
@@ -258,7 +246,7 @@ describe('git-bridge', function () {
               const token = tokenEl.text()
 
               // close Git modal
-              cy.get('body').type('{esc}')
+              cy.findByRole('button', { name: 'Close dialog' }).click()
               cy.findByTestId('git-bridge-modal').should('not.exist')
               // close the modal
               cy.get('body').type('{esc}')
@@ -267,7 +255,7 @@ describe('git-bridge', function () {
               const dir = `/${projectId}`
 
               async function readFile(path: string): Promise<string> {
-                return new Promise((resolve, reject) => {
+                return await new Promise((resolve, reject) => {
                   fs.readFile(path, { encoding: 'utf8' }, (err, blob) => {
                     if (err) return reject(err)
                     resolve(blob as string)
@@ -276,7 +264,7 @@ describe('git-bridge', function () {
               }
 
               async function writeFile(path: string, data: string) {
-                return new Promise<void>((resolve, reject) => {
+                return await new Promise<void>((resolve, reject) => {
                   fs.writeFile(path, data, undefined, err => {
                     if (err) return reject(err)
                     resolve()
@@ -398,8 +386,9 @@ Hello world
               cy.findByText(/\\documentclass/)
                 .parent()
                 .parent()
+                .as('editor')
                 .click()
-                .type('% via editor{enter}')
+              cy.get('@editor').type('% via editor{enter}')
 
               // Trigger flush via compile
               recompile()
@@ -433,28 +422,24 @@ Hello world
   function checkDisabled() {
     ensureUserExists({ email: USER })
 
-    it('should not render the git-bridge UI in the settings', () => {
+    it('should not render the git-bridge UI in the settings', function () {
       login(USER)
       cy.visit('/user/settings')
       cy.findByRole('heading', { name: 'Git integration' }).should('not.exist')
     })
     it('should not render the git-bridge UI in the editor', function () {
       login(USER)
-      createProject('maybe git')
-      cy.findByRole('navigation', {
-        name: 'Project actions',
-      })
-        .findByRole('button', { name: 'Menu' })
-        .click()
-      cy.findByTestId('left-menu').within(() => {
-        cy.findByRole('button', { name: 'Word Count' }) // wait for lazy loading
-        cy.findByRole('heading', { name: 'Sync' }).should('not.exist')
-        cy.findByRole('button', { name: 'Git' }).should('not.exist')
-      })
+      createProjectAndOpenInNewEditor('maybe git')
+      cy.findByRole('tab', {
+        name: 'File tree',
+      }).should('exist') // Wait for load
+      cy.findByRole('tab', {
+        name: 'Integrations',
+      }).should('not.exist')
     })
   }
 
-  describe('disabled in Server Pro', () => {
+  describe('disabled in Server Pro', function () {
     if (isExcludedBySharding('PRO_DEFAULT_1')) return
     startWith({
       pro: true,
@@ -462,7 +447,7 @@ Hello world
     checkDisabled()
   })
 
-  describe('unavailable in CE', () => {
+  describe('unavailable in CE', function () {
     if (isExcludedBySharding('CE_CUSTOM_1')) return
     startWith({
       pro: false,
